@@ -12,16 +12,29 @@ export default function WomenDashboard() {
   );
 
   useEffect(() => {
+    let watchId: number;
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) =>
-          setLocation({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          }),
-        () => {}
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const newLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setLocation(newLoc);
+          
+          // Broadcast live location to server
+          fetch("/api/auth/me", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ currentLocation: newLoc })
+          }).catch(console.error);
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 10000 }
       );
     }
+    return () => {
+      if (watchId !== undefined && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
   }, []);
 
   if (!user) return null;

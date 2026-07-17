@@ -30,6 +30,21 @@ const typeIcons: Record<string, MapMarker["icon"]> = {
   safe_house: "green",
 };
 
+// Haversine formula to calculate distance in km
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+      Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+}
+
 export default function SafeZonesPage() {
   const [zones, setZones] = useState<SafetyZone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,20 +63,39 @@ export default function SafeZonesPage() {
       })
       .catch(() => setLoading(false));
 
+    let watchId: number;
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
+      watchId = navigator.geolocation.watchPosition(
         (pos) => {
           setUserLocation({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
           });
         },
-        () => {}
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 10000 }
       );
     }
+    
+    return () => {
+      if (watchId !== undefined && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
   }, []);
 
   const filteredZones = filter === "all" ? zones : zones.filter((z) => z.type === filter);
+
+  let sortedZones = filteredZones.map(z => ({ ...z, distance: -1 })); // -1 means distance unknown
+  if (userLocation) {
+    sortedZones = filteredZones
+      .map(z => ({
+        ...z,
+        distance: getDistance(userLocation.lat, userLocation.lng, z.lat, z.lng)
+      }))
+      .filter(z => z.distance <= 20) // Only show within 20km
+      .sort((a, b) => a.distance - b.distance);
+  }
 
   const markers: MapMarker[] = [
     ...(userLocation
@@ -76,7 +110,7 @@ export default function SafeZonesPage() {
           },
         ]
       : []),
-    ...filteredZones.map((z) => ({
+    ...sortedZones.map((z) => ({
       id: z.id,
       lat: z.lat,
       lng: z.lng,
@@ -133,20 +167,42 @@ export default function SafeZonesPage() {
       {/* Zone List */}
       {loading ? (
         <div className="text-center py-8 text-gray-400">Loading...</div>
+      ) : sortedZones.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-100">
+          <div className="text-4xl mb-3">🕵️‍♀️</div>
+          <h3 className="text-lg font-medium text-gray-900">No safe zones found nearby</h3>
+          <p className="text-gray-500 mt-1 max-w-md mx-auto">
+            We couldn't find any verified safe zones within 20km of your current location. 
+            In an emergency, please use the SOS button immediately.
+          </p>
+        </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
-          {filteredZones.map((zone) => {
+          {sortedZones.map((zone) => {
             const info = typeColors[zone.type] || {
               label: zone.type,
               color: "gray",
               icon: "📍",
             };
+            
+            let distanceText = "";
+            if (zone.distance !== -1) {
+              distanceText = zone.distance < 1 ? `${(zone.distance * 1000).toFixed(0)} m away` : `${zone.distance.toFixed(1)} km away`;
+            }
+
             return (
               <Card key={zone.id}>
                 <div className="flex items-start gap-3">
                   <div className="text-2xl">{info.icon}</div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900">{zone.name}</h3>
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-semibold text-gray-900 pr-2">{zone.name}</h3>
+                      {distanceText && (
+                        <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          {distanceText}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5">{info.label}</p>
                     <p className="text-sm text-gray-600 mt-1">{zone.address}</p>
                     <p className="text-sm text-gray-500 mt-0.5">{zone.phone}</p>

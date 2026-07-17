@@ -1,17 +1,72 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRealtimeAlerts } from "@/hooks/use-realtime-alerts";
+import type { MapMarker } from "@/types";
+
+const Map = dynamic(() => import("@/components/ui/map").then((mod) => mod.Map), { ssr: false });
 
 export default function ParentDashboard() {
   const { user } = useAuth();
   const { alerts, loading } = useRealtimeAlerts();
+  const [daughterLocation, setDaughterLocation] = useState<{lat: number, lng: number, timestamp?: number} | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLocation = async () => {
+      try {
+        const res = await fetch("/api/parent/daughter-location");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.location) {
+            setDaughterLocation(data.location);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch daughter location", err);
+      }
+    };
+
+    fetchLocation();
+    const interval = setInterval(fetchLocation, 15000); // Fetch every 15 seconds
+    
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   if (!user) return null;
 
   const activeAlerts = alerts.filter((a) => a.status === "active");
+
+  const mapMarkers: MapMarker[] = [];
+  
+  if (activeAlerts.length > 0) {
+    activeAlerts.forEach((alert) => {
+      mapMarkers.push({
+        id: alert.id,
+        lat: alert.location.lat,
+        lng: alert.location.lng,
+        title: "🚨 Active Alert",
+        description: alert.details || "Emergency reported here",
+        type: "danger"
+      });
+    });
+  } else if (daughterLocation) {
+    mapMarkers.push({
+      id: "daughter-live",
+      lat: daughterLocation.lat,
+      lng: daughterLocation.lng,
+      title: user.linkedDaughter || "Daughter",
+      description: `Live Location (Updated: ${daughterLocation.timestamp ? new Date(daughterLocation.timestamp).toLocaleTimeString() : 'Recently'})`,
+      type: "user",
+      icon: "blue"
+    });
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -122,6 +177,28 @@ export default function ParentDashboard() {
           </p>
         </Card>
       )}
+
+      {/* Live Map */}
+      <Card className="overflow-hidden">
+        <CardHeader className="bg-white border-b">
+          <CardTitle>📍 Live Tracking</CardTitle>
+        </CardHeader>
+        <div className="p-0">
+          {mapMarkers.length > 0 ? (
+            <Map 
+              center={[mapMarkers[0].lat, mapMarkers[0].lng]} 
+              zoom={15} 
+              markers={mapMarkers} 
+              height="400px" 
+              className="border-0 rounded-none"
+            />
+          ) : (
+            <div className="h-[400px] flex items-center justify-center bg-gray-50 border-t border-gray-100">
+              <p className="text-gray-500">No active location data available.</p>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Alert History */}
       {alerts.length > 0 && (

@@ -4,6 +4,8 @@ import React, { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { MapMarker } from "@/types";
+import { renderToString } from "react-dom/server";
+import { AlertTriangle, ShieldCheck, User as UserIcon, HeartHandshake, LocateFixed, MapPin } from "lucide-react";
 
 export type { MapMarker };
 
@@ -16,45 +18,25 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-const redIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-red.png",
-  iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-red.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+const createCustomIcon = (iconElement: React.ReactNode, colorClass: string) => {
+  return L.divIcon({
+    html: renderToString(
+      <div className={`flex items-center justify-center w-8 h-8 rounded-full bg-white shadow-md border-2 ${colorClass}`}>
+        {iconElement}
+      </div>
+    ),
+    className: "custom-leaflet-icon",
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32],
+  });
+};
 
-const blueIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png",
-  iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-blue.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-const greenIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-green.png",
-  iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-green.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-
-const orangeIcon = new L.Icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-orange.png",
-  iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-orange.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+const redIcon = createCustomIcon(<AlertTriangle size={18} className="text-red-600" />, "border-red-600");
+const blueIcon = createCustomIcon(<UserIcon size={18} className="text-blue-600" />, "border-blue-600");
+const greenIcon = createCustomIcon(<ShieldCheck size={18} className="text-green-600" />, "border-green-600");
+const orangeIcon = createCustomIcon(<HeartHandshake size={18} className="text-orange-600" />, "border-orange-600");
+const defaultIcon = createCustomIcon(<MapPin size={18} className="text-gray-600" />, "border-gray-600");
 
 interface MapProps {
   center?: [number, number];
@@ -67,7 +49,7 @@ interface MapProps {
   interactive?: boolean;
 }
 
-const iconMap: Record<string, L.Icon> = {
+const iconMap: Record<string, L.DivIcon> = {
   red: redIcon,
   blue: blueIcon,
   green: greenIcon,
@@ -112,6 +94,45 @@ export function Map({
     }).addTo(map);
 
     mapInstanceRef.current = map;
+
+    // Add Locate Control
+    const LocateControl = L.Control.extend({
+      options: {
+        position: 'bottomright'
+      },
+      onAdd: function (map: L.Map) {
+        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom bg-white flex items-center justify-center rounded-md shadow-md cursor-pointer hover:bg-gray-50 transition-colors');
+        container.style.width = '34px';
+        container.style.height = '34px';
+        container.innerHTML = renderToString(<LocateFixed size={20} className="text-gray-700" />);
+        
+        container.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                const { latitude, longitude } = pos.coords;
+                map.setView([latitude, longitude], 15);
+                if (onLocationFoundRef.current) {
+                  onLocationFoundRef.current(latitude, longitude);
+                }
+                if (userMarkerRef.current) {
+                  userMarkerRef.current.setLatLng([latitude, longitude]);
+                } else {
+                  userMarkerRef.current = L.marker([latitude, longitude], {
+                    icon: blueIcon,
+                  }).addTo(map).bindPopup("You are here").openPopup();
+                }
+              },
+              () => console.log("Could not get location")
+            );
+          }
+        }
+        return container;
+      }
+    });
+    map.addControl(new LocateControl());
 
     if (showUserLocation && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -164,7 +185,7 @@ export function Map({
         ? blueIcon
         : marker.type === "volunteer"
         ? orangeIcon
-        : blueIcon;
+        : defaultIcon;
 
       const m = L.marker([marker.lat, marker.lng], { icon })
         .addTo(map)
