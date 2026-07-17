@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 import dns from "dns";
 
-// Force Node.js to use public DNS resolvers for ALL lookups
+// Force Node.js to use public DNS resolvers for ALL lookups in development
 // This fixes "querySrv ECONNREFUSED" errors on networks that block DNS
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
+if (process.env.NODE_ENV !== "production") {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+}
 
 const MONGODB_URI = process.env.MONGODB_URI!;
 
@@ -67,14 +69,14 @@ export async function connectToDatabase() {
   if (!cached.promise) {
     let uri = MONGODB_URI;
 
-    // If using SRV, resolve it manually with our DNS servers
-    if (uri.startsWith("mongodb+srv://")) {
+    // If using SRV and in development, resolve it manually with our DNS servers
+    // Vercel/Production environments usually handle SRV correctly and might block custom DNS.
+    if (uri.startsWith("mongodb+srv://") && process.env.NODE_ENV !== "production") {
       try {
         uri = await resolveSrvUri(uri);
-        console.log("✅ SRV resolved successfully");
+        console.log("✅ SRV resolved manually for development");
       } catch (srvErr) {
         console.error("❌ SRV resolution failed, trying direct URI:", (srvErr as Error).message);
-        // Fall through and try the original URI anyway
         uri = MONGODB_URI;
       }
     }
