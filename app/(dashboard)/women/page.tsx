@@ -135,13 +135,13 @@ export default function WomenDashboard() {
           </Card>
         </Link>
 
-        <Link href="/women/fake-call">
+        <Link href="/women/safe-routes">
           <Card hover className="h-full bg-indigo-50 border-indigo-200">
             <CardHeader>
-              <CardTitle className="text-indigo-900">📱 Fake Call</CardTitle>
+              <CardTitle className="text-indigo-900">🗺️ Safe Routes</CardTitle>
             </CardHeader>
-            <p className="text-sm text-indigo-700">
-              Schedule a fake incoming call to escape uncomfortable situations.
+            <p className="text-sm text-indigo-700 px-6 pb-6 pt-0">
+              Plan your journey with AI-powered safety analysis.
             </p>
           </Card>
         </Link>

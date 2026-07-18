@@ -23,12 +23,33 @@ export function useVoiceCommand(triggerWord: string, onTrigger: () => void) {
         setError(null);
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = async (event: any) => {
         const current = event.resultIndex;
         const transcript = event.results[current][0].transcript.toLowerCase();
         
+        // Immediate fallback
         if (transcript.includes(triggerWord.toLowerCase())) {
           onTrigger();
+          return;
+        }
+
+        // AI Intent Detection (debounce or throttle might be needed in prod, but for now we check the final transcript block)
+        if (event.results[current].isFinal) {
+          try {
+            const res = await fetch("/api/ai/intent", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transcript }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.isDistress) {
+                onTrigger();
+              }
+            }
+          } catch (e) {
+            console.error("Failed to analyze intent:", e);
+          }
         }
       };
 

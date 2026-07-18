@@ -5,6 +5,8 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { SOSButton } from "@/components/ui/sos-button";
 import { useRouter } from "next/navigation";
 import { useVoiceCommand } from "@/hooks/use-voice-command";
+import { FakeCallModal } from "@/components/ui/fake-call-modal";
+import { PhoneOutgoing } from "lucide-react";
 
 
 function getInitialLocationStatus(): "loading" | "error" {
@@ -22,6 +24,7 @@ export default function SOSPage() {
     "loading" | "ready" | "error"
   >(getInitialLocationStatus);
   const [lastAlert, setLastAlert] = useState<string | null>(null);
+  const [isFakeCallActive, setIsFakeCallActive] = useState(false);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -143,6 +146,25 @@ export default function SOSPage() {
         </div>
       </Card>
 
+      {/* AI Fake Call */}
+      <Card padding="lg" className="border-purple-200 bg-purple-50">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-purple-900">📞 AI Fake Call</h3>
+            <p className="text-sm text-purple-700">
+              Simulate a realistic phone call to deter harassment.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsFakeCallActive(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-purple-600 text-white hover:bg-purple-700 flex items-center gap-2"
+          >
+            <PhoneOutgoing size={16} />
+            Simulate Call
+          </button>
+        </div>
+      </Card>
+
       {/* SOS Button */}
       <div className="flex justify-center py-8">
         <SOSButton
@@ -204,6 +226,8 @@ export default function SOSPage() {
           </button>
         </div>
       )}
+
+      {isFakeCallActive && <FakeCallModal onClose={() => setIsFakeCallActive(false)} />}
     </div>
   );
 }
